@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+	<!-- _name must have same name as .py file but capitalise it. Shows on Menu this way-->
+	<_name>Colorize</_name>
+	<!-- id should be unique. Associates entered values with this menu -->
+	<id>githubacct.uniqueid.yohelpers.colorize</id>
+	<!-- mention a dependency here and will check for existence (optional)-->
+	<dependency type="executable" location="extensions">yohelpers/colorize.py</dependency>
+
+	<!-- start notebook -->
+	<param name='active-tab' type="notebook">
+		<!-- one per page(tab) - unique names. Can discover which page in program-->
+		<page name="title" _gui-text="Settings">
+			<param name="randomness" type="int" min="0" max="100" _gui-text="Percentuall specification of how much can colors differ">15</param>
+			<param name="lines_width" type="float" _gui-text="width of lines (mm)">0.0</param>
+			<param name="color_space" _gui-text="Color space (currently only RGB is supported)" type="optiongroup">
+				<!-- underscores indicate translatability -->
+				<_option value="rgb">RGB</_option>
+			</param>
+			<param name="colors" type="string" _gui_text="Colors to be used (in RRGGBB format, comma separated)"></param>
+			<param name="grayscale" type="boolean" _gui-text="Grayscale">false</param>
+			<param name="tones" type="boolean" _gui-text="Keep tones">false</param>
+		</page>
+	</param>
+	<!-- classify which menu it appears under - can be new name -->
+	<effect>
+	<object-type>all</object-type>
+		<effects-menu>
+			<submenu _name="YoHelpers"/> <!-- which menu under Extensions -->
+		</effects-menu>
+	</effect>
+	<!-- py file again -->
+	<script>
+		<command reldir="extensions" interpreter="python">yohelpers/colorize.py</command>
+	</script>
+</inkscape-extension>
