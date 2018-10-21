@@ -123,15 +123,32 @@ def findElements(root, name, selectedElements, isSelected = False, transformatio
     if len(selectedElements) == 0 or (hasattr(root, "get") and root.get("id") in selectedElements):
         isSelected = True
 
+    if isLockedOrHidden(root):
+        return []
+
     groups = root.findall("ns:g", namespaces = {"ns":"http://www.w3.org/2000/svg"})
     elements = [Element(el, transformations[:]) for el in root.findall("ns:" + name, namespaces = {"ns":"http://www.w3.org/2000/svg"})]
     # filter to selected ones
     debug(elements)
     elements = [el for el in elements if isSelected or el.path.get("id") in selectedElements]
+    # filter to not hidden/locked tones
+    elements = [el for el in elements if not isLockedOrHidden(el.path)]
     debug(elements)
     for group in groups:
         elements = elements + findElements(group, name, selectedElements, isSelected, transformations[:])
     return elements
+
+def isLockedOrHidden(element):
+    if not hasattr(element, "get"):
+        return False
+    if element.get("{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}insensitive") == "true":
+        # inkscape locked
+        return True
+    style = element.get("style")
+    if style and "display:hidden" in style:
+        # inkscape locked
+        return True
+    return False
 
 class Color:
     r = 0
