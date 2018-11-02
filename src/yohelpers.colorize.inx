@@ -10,9 +10,9 @@
 	<!-- start notebook -->
 	<param name='active-tab' type="notebook">
 		<!-- one per page(tab) - unique names. Can discover which page in program-->
-		<page name="title" _gui-text="Settings">
+		<page name="title" _gui-text="Fill">
+			<param name="change_fill" type="boolean" _gui-text="Change fill">true</param>
 			<param name="randomness" type="int" min="0" max="100" _gui-text="Percentuall specification of how much can colors differ">15</param>
-			<param name="lines_width" type="float" _gui-text="width of lines (mm)">0.0</param>
 			<param name="color_space" _gui-text="Color space (currently only RGB is supported)" type="optiongroup">
 				<!-- underscores indicate translatability -->
 				<_option value="rgb">RGB</_option>
@@ -20,6 +20,17 @@
 			<param name="colors" type="string" _gui_text="Colors to be used (in RRGGBB format, comma separated)"></param>
 			<param name="grayscale" type="boolean" _gui-text="Grayscale">false</param>
 			<param name="tones" type="boolean" _gui-text="Keep tones">false</param>
+		</page>
+		<page name="title" _gui-text="Lines">
+			<param name="change_lines" type="boolean" _gui-text="Change lines">true</param>
+			<param name="lines_width" type="float" _gui-text="width of lines (mm)">0.0</param>
+			<param name="lines_color" type="string" _gui_text="Colors to be used (in RRGGBB format, comma separated)"></param>
+		</page>
+		<page name="title" _gui-text="Opacity">
+			<param name="change_opacity" type="boolean" _gui-text="Change opacity">true</param>
+			<param name="opacity_start" type="float" min="0" max="1" _gui-text="Opacity level">1</param>
+			<param name="opacity_end" type="float" min="0" max="1" _gui-text="Opacity level">0</param>
+			<param name="opacity_formula" type="string" _gui_text="Formula how opacity should change within an image">1/x</param>
 		</page>
 	</param>
 	<!-- classify which menu it appears under - can be new name -->

@@ -7,7 +7,12 @@ import re
 import os
 import traceback
 from xml.dom import minidom
-from abc import ABCMeta, abstractmethod
+import parser
+
+from lib.color import Color
+from lib.box import Box
+from lib.element import Element
+from lib.transformations import Transformation
 # __version__ = "0.1"
 
 boolParams = {"type": "inkbool"}
@@ -37,31 +42,47 @@ except:
             self.options = self.OptionParser.parse_args()[0]
             self.effect();
 
-def colorize(root, paths, color_space, grayscale, randomness, colors, lines_width, tones):
+def fill(root, paths, color_space, grayscale, randomness, colors, tones):
     box = boundaries(root, paths)
     # print box.width(), box.height()
     for element in paths:
-        path = element.path
-        style = []
-        if "style" in path.attrib:
-            style = path.attrib["style"].split(";")
-        newStyle = []
         localBox = boundaries(root, [element])
         color = determineColor(box, localBox, grayscale, randomness, colors, tones)
-        for value in style:
-            data = value.split(":")
-            if data[0] in ["fill", "stroke", "stroke-width"]:
-                continue
-            newStyle.append(":".join(data))
+        element.changeStyle({
+            "fill" : color.rgb() if color_space == "rgb" else color.cmyk()
+        })
 
-        newStyle.append("fill:%s" % (color.rgb() if color_space == "rgb" else color.cmyk()))
-        newStyle.append("stroke:%s" % ("#ffffff" if color_space == "rgb" else "cmyk(0%,0%,0%,0%)"))
-        newStyle.append("stroke-width:%smm" % (lines_width))
+def stroke(root, paths, color_space, width, color):
+    for element in paths:
+        element.changeStyle({
+            "stroke" : color.rgb() if color_space == "rgb" else color.cmyk(),
+            "stroke-width" : "%smm" % width
+        })
 
-        debug(root)
-        debug(path.get("style"))
-        path.set("style", ";".join(newStyle))
-        debug(path.get("style"))
+def opacity(root, paths, start, end, formula):
+    box = boundaries(root, paths)
+    # print box.width(), box.height()
+    for element in paths:
+        localBox = boundaries(root, [element])
+        validate(formula)
+        x = box.relativeX(localBox.minX)
+        y = box.relativeY(localBox.minY)
+        evalRes = eval(formula)
+        opacity = min(start, end) + (abs(start - end) * evalRes)
+        debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, formula, opacity))
+        debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, evalRes, opacity))
+        element.changeStyle({
+            "fill-opacity": "%.2f" % opacity
+        })
+
+def validate(formula):
+    # allowed functions
+    formula = re.sub("\W(abs|min|max|sin|cos)\W", "", formula, re.IGNORECASE)
+    formula = re.sub("\W(x|y)\W", "", formula, re.IGNORECASE)
+    if re.match("a-z", formula):
+        raise "Possibly dangerous formula"
+
+
 
 def determineColor(outterBox, innerBox, grayscale, randomness, colors, tones):
     color = Color()
@@ -78,9 +99,9 @@ def determineColor(outterBox, innerBox, grayscale, randomness, colors, tones):
     if colors is not None:
         # sem by se hodilo něco komplexnějšího, ať je nějaký pattern...
         base = colors[random.randint(0, len(colors) - 1)]
-        baseR = int(base[0:2], 16)
-        baseG = int(base[2:4], 16)
-        baseB = int(base[4:6], 16)
+        baseR = base.r
+        baseG = base.g
+        baseB = base.b
 
     if tones:
         negative = min(randomness, baseR if baseR else 255, baseG if baseG else 255, baseB if baseB else 255)
@@ -129,11 +150,9 @@ def findElements(root, name, selectedElements, isSelected = False, transformatio
     groups = root.findall("ns:g", namespaces = {"ns":"http://www.w3.org/2000/svg"})
     elements = [Element(el, transformations[:]) for el in root.findall("ns:" + name, namespaces = {"ns":"http://www.w3.org/2000/svg"})]
     # filter to selected ones
-    debug(elements)
     elements = [el for el in elements if isSelected or el.path.get("id") in selectedElements]
-    # filter to not hidden/locked tones
+    # filter to not include hidden/locked ones
     elements = [el for el in elements if not isLockedOrHidden(el.path)]
-    debug(elements)
     for group in groups:
         elements = elements + findElements(group, name, selectedElements, isSelected, transformations[:])
     return elements
@@ -150,181 +169,6 @@ def isLockedOrHidden(element):
         return True
     return False
 
-class Color:
-    r = 0
-    g = 0
-    b = 0
-
-    # hexa representation of RGB
-    def rgb(self):
-        return "#%.2X%.2X%.2X" % (self.r, self.g, self.b)
-
-    # percentage representation of cmyk
-    def cmyk(self):
-        k = 0 # let's assume that there is no black left in printer
-        c = int(100 * ((1 - (self.r/255.0) - k) / (1 - k)))
-        m = int(100 * ((1 - (self.g/255.0) - k) / (1 - k)))
-        y = int(100 * ((1 - (self.b/255.0) - k) / (1 - k)))
-        return "cmyk(%s%%,%s%%,%s%%,%s%%)" % (c, m, y, k)
-
-class Box:
-    minX = None
-    minY = None
-    maxX = None
-    maxY = None
-
-    def relativeX(self, x, range=100):
-        return (self.maxX - x)/(self.maxX - self.minX) * range
-
-    def relativeY(self, y, range=100):
-        return (self.maxY - y)/(self.maxY - self.minY) * range
-
-    def width(self):
-        return abs(self.maxX - self.minX)
-
-    def height(self):
-        return abs(self.maxY - self.minY)
-
-    def coords(self):
-        return (self.minX, self.minY, self.maxX, self.maxY)
-
-class Element:
-    path = None
-    transformations = []
-
-    def __init__(self, path, transformations):
-        self.path = path
-        self.transformations = transformations
-
-    def Transform(self, x, y):
-        if len(self.transformations) > 0:
-            # print "==== %s ===" % self.path.attrib["id"]
-            # print "%s %s => (%s) =>" % (x, y, ", ".join([t.__class__.__name__ for t in self.transformations])),
-            pass
-        for transform in reversed(self.transformations):
-            (x, y) = transform.Apply(x, y)
-
-        # print "%s %s" % (x, y)
-
-        return (x, y)
-
-    def Boundaries(self):
-        b = Box()
-        path = self.path
-
-        currX = currY = None
-        additive = False
-        currentSkip = skip = -1
-        coords = []
-        if "d" in path.attrib:
-            coords = path.attrib["d"].split(" ")
-            if coords[0] == "M":
-                additive = False
-                coords = coords[1:]
-        elif "points" in path.attrib:
-            additive = False
-            coords = path.attrib["points"].split(" ")
-
-        for command in coords:
-            try:
-                xy = command.split(",")
-                x = float(xy[0])
-                y = float(xy[1])
-
-                if currentSkip < 0 and skip > 0:
-                    currentSkip = skip
-                if currentSkip > 0:
-                    currentSkip -= 1
-                    # print "skipping", command, currentSkip, skip
-                    continue
-                if currentSkip == 0:
-                    # print "processing", command
-                    currentSkip -= 1
-
-                if not additive or currX is None:
-                    currX = x
-                    currY = y
-                else:
-                    currX += x
-                    currY += y
-                (transX, transY) = self.Transform(currX, currY)
-
-                if b.minX == None or b.minX > transX:
-                    b.minX = transX
-                if b.minY == None or b.minY > transY:
-                    b.minY = transY
-                if b.maxX == None or b.maxX < transX:
-                    b.maxX = transX
-                if b.maxY == None or b.maxY < transY:
-                    b.maxY = transY
-            except Exception as e:
-                # traceback.print_exc()
-                skip = -1
-                if command == "z" or command == "Z":
-                    continue
-                if command.upper() == command:
-                    additive = False
-                    currX = currY = None
-                else:
-                    additive = True
-                if command == "c" or command == "C":
-                    skip = 2
-        return b
-
-
-class Transformation():
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def Apply(self, x, y):
-        pass
-
-    @staticmethod
-    def Parse(element):
-        transformations = []
-        if hasattr(element, "attrib") and "transform" in element.attrib:
-            matches = re.findall("([a-z]+)\(([^)]+)\)", element.attrib["transform"])
-            for match in matches:
-                type = match[0]
-                params = [float(i) for i in re.findall(r"-?[0-9.]+", match[1])]
-                if type == "translate":
-                    transformations.append(TranslateTransformation(*params))
-                elif type == "matrix":
-                    transformations.append(MatrixTransformation(*params))
-        return transformations
-
-class TranslateTransformation(Transformation):
-    moveX = 0
-    moveY = 0
-
-    def __init__(self, moveX, moveY = 0):
-        self.moveX = moveX
-        self.moveY = moveY
-
-    def Apply(self, x, y):
-        return (x + self.moveX, y + self.moveY)
-
-class MatrixTransformation(Transformation):
-    a = 0
-    b = 0
-    c = 0
-    d = 0
-    e = 0
-    f = 0
-
-    def __init__(self, a, b, c, d, e, f):
-        self.a = a
-        self.b = b
-        self.c = c
-        self.d = d
-        self.e = e
-        self.f = f
-
-    def Apply(self, x, y):
-        newX = self.a * x + self.c * y + self.e
-        newY = self.b * x + self.d * y + self.f
-        return (newX, newY)
-
 class ColorizeExtension(Effect):
     def __init__(self):
         Effect.__init__(self)
@@ -339,13 +183,25 @@ class ColorizeExtension(Effect):
 
         self.OptionParser.add_option("--input_filename")
         self.OptionParser.add_option("--overwrite", default=False, **boolParams)
+        self.OptionParser.add_option("--change_fill", default=False, **boolParams)
+        self.OptionParser.add_option("--change_lines", default=False, **boolParams)
+        self.OptionParser.add_option("--change_opacity", default=False, **boolParams)
+
         self.OptionParser.add_option("--color_space", default="rgb")
-        self.OptionParser.add_option("--active-tab", help="no use in CLI")
         self.OptionParser.add_option("--grayscale", default=False, **boolParams)
         self.OptionParser.add_option("--tones", default=False, **boolParams)
-        self.OptionParser.add_option("--lines_width", type="float", default=0.0)
         self.OptionParser.add_option("--randomness", type="int", default=15, help=u"Procentní vyjádření jak moc může barva ustřelit do jakéhokoli směru (0 => plynulé přechody; 100 => kompletně random)")
         self.OptionParser.add_option("--colors", type="str", help=u"list barev (formát rrggbb (hexa)) jejichž variace mají být použité")
+
+        self.OptionParser.add_option("--lines_width", type="float", default=0.0)
+        self.OptionParser.add_option("--lines_color", default="#ffffff")
+
+        self.OptionParser.add_option("--opacity_start", type="float", default=1.0)
+        self.OptionParser.add_option("--opacity_end", type="float", default=0.0)
+        self.OptionParser.add_option("--opacity_formula", default="1/x")
+
+        self.OptionParser.add_option("--active-tab", help="no use in CLI")
+
 
     def effect(self):
         tree = None
@@ -354,13 +210,16 @@ class ColorizeExtension(Effect):
         else:
             tree = self.document
 
-        debug(self.selected)
-
         paths = findElements(tree, "path", self.selected)
         polygons = findElements(tree, "polygon", self.selected)
-        colors = None if not self.options.colors else re.findall("[a-z0-9]{6}", self.options.colors, re.IGNORECASE)
+        colors = None if not self.options.colors else [Color.FromRGB(c) for c in re.findall("[a-z0-9]{6}", self.options.colors, re.IGNORECASE)]
 
-        colorize(tree, paths + polygons, self.options.color_space, self.options.grayscale, self.options.randomness, colors, self.options.lines_width, self.options.tones)
+        if self.options.change_fill:
+            fill(tree, paths + polygons, self.options.color_space, self.options.grayscale, self.options.randomness, colors, self.options.tones)
+        if self.options.change_lines:
+            stroke(tree, paths + polygons, self.options.color_space, self.options.lines_width, Color.FromRGB(self.options.lines_color))
+        if self.options.change_opacity:
+            opacity(tree, paths + polygons, float(self.options.opacity_start), float(self.options.opacity_end), self.options.opacity_formula)
 
         if self.options.input_filename:
             etree.register_namespace('namespace',"http://www.w3.org/2000/svg")
@@ -371,10 +230,10 @@ class ColorizeExtension(Effect):
                 target_file = self.options.input_filename
             with open(target_file, 'w') as file:
                 file.write(re.sub("(\s*\n)+", "\n", xml, re.MULTILINE))
-
+'''
 def debug(data):
     pass
-
+'''
 if __name__ == "__main__":
     ext = ColorizeExtension()
     ext.affect()
