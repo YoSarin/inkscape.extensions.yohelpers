@@ -79,7 +79,7 @@ def validate(formula):
     # allowed functions
     formula = re.sub("\W(abs|min|max|sin|cos)\W", "", formula, re.IGNORECASE)
     formula = re.sub("\W(x|y)\W", "", formula, re.IGNORECASE)
-    if re.match("a-z", formula):
+    if re.search("a-z", formula):
         raise "Possibly dangerous formula"
 
 
@@ -230,10 +230,10 @@ class ColorizeExtension(Effect):
                 target_file = self.options.input_filename
             with open(target_file, 'w') as file:
                 file.write(re.sub("(\s*\n)+", "\n", xml, re.MULTILINE))
-'''
+
 def debug(data):
     pass
-'''
+
 if __name__ == "__main__":
     ext = ColorizeExtension()
     ext.affect()
