@@ -65,8 +65,8 @@ def opacity(root, paths, start, end, formula):
     for element in paths:
         localBox = boundaries(root, [element])
         validate(formula)
-        x = box.relativeX(localBox.minX)
-        y = box.relativeY(localBox.minY)
+        x = box.relativeX(localBox.minX)/100
+        y = box.relativeY(localBox.minY)/100
         evalRes = eval(formula)
         opacity = min(start, end) + (abs(start - end) * evalRes)
         debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, formula, opacity))
