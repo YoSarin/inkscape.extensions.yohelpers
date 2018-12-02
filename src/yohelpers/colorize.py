@@ -46,43 +46,60 @@ def fill(root, paths, color_space, grayscale, randomness, colors, tones):
     box = boundaries(root, paths)
     # print box.width(), box.height()
     for element in paths:
-        localBox = boundaries(root, [element])
-        color = determineColor(box, localBox, grayscale, randomness, colors, tones)
-        element.changeStyle({
-            "fill" : color.rgb() if color_space == "rgb" else color.cmyk()
-        })
+        try:
+            localBox = boundaries(root, [element])
+            color = determineColor(box, localBox, grayscale, randomness, colors, tones)
+            element.changeStyle({
+                "fill" : color.rgb() if color_space == "rgb" else color.cmyk()
+            })
+        except:
+            pass
 
 def stroke(root, paths, color_space, width, color):
     for element in paths:
-        element.changeStyle({
-            "stroke" : color.rgb() if color_space == "rgb" else color.cmyk(),
-            "stroke-width" : "%smm" % width
-        })
+        try:
+            element.changeStyle({
+                "stroke" : color.rgb() if color_space == "rgb" else color.cmyk(),
+                "stroke-width" : "%smm" % width
+            })
+        except:
+            pass
 
-def opacity(root, paths, start, end, formula):
-    box = boundaries(root, paths)
+def opacity(root, paths, remove, start, end, formula):
+    box = centerBoundaries(root, paths)
     # print box.width(), box.height()
     for element in paths:
-        localBox = boundaries(root, [element])
-        validate(formula)
-        x = box.relativeX(localBox.minX)/100
-        y = box.relativeY(localBox.minY)/100
-        evalRes = eval(formula)
-        opacity = min(start, end) + (abs(start - end) * evalRes)
-        debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, formula, opacity))
-        debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, evalRes, opacity))
-        element.changeStyle({
-            "fill-opacity": "%.2f" % opacity
-        })
+        try:
+            if remove:
+                element.removeStyle(["fill-opacity", "stroke-opacity"])
+                continue
+
+            localBox = boundaries(root, [element])
+            validate(formula)
+            x = box.relativeX(localBox.centerX())/100
+            y = box.relativeY(localBox.centerY())/100
+            evalRes = evalFormula(formula, x, y)
+            opacity = min(start, end) + (abs(start - end) * evalRes)
+            # debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, formula, opacity))
+            # debug("%s + (abs(%s - %s) * %s) = %.2f" % (min(start, end), start, end, evalRes, opacity))
+            element.changeStyle({
+                "fill-opacity": "%.2f" % opacity
+            })
+        except Exception as e:
+            debug(e)
+            debug(traceback.format_exc())
+            pass
 
 def validate(formula):
     # allowed functions
-    formula = re.sub("\W(abs|min|max|sin|cos)\W", "", formula, re.IGNORECASE)
-    formula = re.sub("\W(x|y)\W", "", formula, re.IGNORECASE)
-    if re.search("a-z", formula):
-        raise "Possibly dangerous formula"
+    cleaned = re.sub(r"(?:^|(?<=\W))(abs|min|max|sin|cos|log10|log)(?:(?=\s*\())", "", formula, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(?:^|(?<=\W))(x|y)(?:(?=\W)|$)", "", cleaned, flags=re.IGNORECASE)
+    if re.search("[a-z]", cleaned, flags=re.IGNORECASE):
+        raise Exception("Possibly dangerous formula: '" + cleaned + "' (" + formula + ")")
 
-
+def evalFormula(formula, x, y):
+    from math import sin, cos, log, log10
+    return eval(formula)
 
 def determineColor(outterBox, innerBox, grayscale, randomness, colors, tones):
     color = Color()
@@ -129,6 +146,22 @@ def boundaries(root, elements):
             b.maxX = eb.maxX
         if b.maxY == None or b.maxY < eb.maxY:
             b.maxY = eb.maxY
+        # print eb.coords(), b.coords()
+    return b
+
+
+def centerBoundaries(root, elements):
+    b = Box()
+    for element in elements:
+        eb = element.Boundaries()
+        if b.minX == None or b.minX > eb.centerX():
+            b.minX = eb.centerX()
+        if b.minY == None or b.minY > eb.centerY():
+            b.minY = eb.centerY()
+        if b.maxX == None or b.maxX < eb.centerX():
+            b.maxX = eb.centerX()
+        if b.maxY == None or b.maxY < eb.centerY():
+            b.maxY = eb.centerY()
         # print eb.coords(), b.coords()
     return b
 
@@ -196,6 +229,7 @@ class ColorizeExtension(Effect):
         self.OptionParser.add_option("--lines_width", type="float", default=0.0)
         self.OptionParser.add_option("--lines_color", default="#ffffff")
 
+        self.OptionParser.add_option("--remove_opacity", default=False, **boolParams)
         self.OptionParser.add_option("--opacity_start", type="float", default=1.0)
         self.OptionParser.add_option("--opacity_end", type="float", default=0.0)
         self.OptionParser.add_option("--opacity_formula", default="1/x")
@@ -219,7 +253,7 @@ class ColorizeExtension(Effect):
         if self.options.change_lines:
             stroke(tree, paths + polygons, self.options.color_space, self.options.lines_width, Color.FromRGB(self.options.lines_color))
         if self.options.change_opacity:
-            opacity(tree, paths + polygons, float(self.options.opacity_start), float(self.options.opacity_end), self.options.opacity_formula)
+            opacity(tree, paths + polygons, self.options.remove_opacity, float(self.options.opacity_start), float(self.options.opacity_end), self.options.opacity_formula)
 
         if self.options.input_filename:
             etree.register_namespace('namespace',"http://www.w3.org/2000/svg")
@@ -230,10 +264,10 @@ class ColorizeExtension(Effect):
                 target_file = self.options.input_filename
             with open(target_file, 'w') as file:
                 file.write(re.sub("(\s*\n)+", "\n", xml, re.MULTILINE))
-
+'''
 def debug(data):
     pass
-
+'''
 if __name__ == "__main__":
     ext = ColorizeExtension()
     ext.affect()

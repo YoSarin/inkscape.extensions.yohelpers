@@ -28,6 +28,7 @@
 		</page>
 		<page name="title" _gui-text="Opacity">
 			<param name="change_opacity" type="boolean" _gui-text="Change opacity">true</param>
+			<param name="remove_opacity" type="boolean" _gui-text="Remove opacity">false</param>
 			<param name="opacity_start" type="float" min="0" max="1" _gui-text="Opacity level">1</param>
 			<param name="opacity_end" type="float" min="0" max="1" _gui-text="Opacity level">0</param>
 			<param name="opacity_formula" type="string" _gui_text="Formula how opacity should change within an image">1/x</param>

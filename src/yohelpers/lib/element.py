@@ -1,5 +1,5 @@
 from box import Box
-
+import traceback
 
 class Element:
     path = None
@@ -16,6 +16,16 @@ class Element:
 
         for name in style:
             originalStyle[name] = style[name]
+
+        self.path.set("style", ";".join(["%s:%s" % (k, originalStyle[k]) for k in originalStyle]))
+
+    def removeStyle(self, style):
+        originalStyle = {}
+        if "style" in self.path.attrib:
+            originalStyle = {i.split(":")[0]: i.split(":", 1)[1] for i in self.path.attrib["style"].split(";")}
+
+        for name in style:
+            originalStyle.pop(name, None)
 
         self.path.set("style", ";".join(["%s:%s" % (k, originalStyle[k]) for k in originalStyle]))
 
@@ -48,11 +58,20 @@ class Element:
             additive = False
             coords = path.attrib["points"].split(" ")
 
+        activeCommand = ""
         for command in coords:
             try:
                 xy = command.split(",")
-                x = float(xy[0])
-                y = float(xy[1])
+                x = y = None
+                if (activeCommand.upper() == "H"):
+                    x = float(xy[0])
+                    y = None
+                elif (activeCommand.upper() == "V"):
+                    y = float(xy[0])
+                    x = None
+                else:
+                    x = float(xy[0])
+                    y = float(xy[1])
 
                 if currentSkip < 0 and skip > 0:
                     currentSkip = skip
@@ -65,11 +84,12 @@ class Element:
                     currentSkip -= 1
 
                 if not additive or currX is None:
-                    currX = x
-                    currY = y
+                    currX = (x if x is not None else currX)
+                    currY = (y if y is not None else currY)
                 else:
-                    currX += x
-                    currY += y
+                    currX += (x if x is not None else 0)
+                    currY += (y if y is not None else 0)
+
                 (transX, transY) = self.Transform(currX, currY)
 
                 if b.minX == None or b.minX > transX:
@@ -81,7 +101,6 @@ class Element:
                 if b.maxY == None or b.maxY < transY:
                     b.maxY = transY
             except Exception as e:
-                # traceback.print_exc()
                 skip = -1
                 if command == "z" or command == "Z":
                     continue
@@ -92,4 +111,6 @@ class Element:
                     additive = True
                 if command == "c" or command == "C":
                     skip = 2
+                activeCommand = command
+
         return b
